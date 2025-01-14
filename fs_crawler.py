@@ -58,11 +58,41 @@ def scan_filesystem(conn, run_id, base_path):
     
     conn.commit()
 
+def find_duplicates(conn):
+    """Find files that share the same MD5 hash but have different paths"""
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT f1.md5_hash, f1.full_path, f2.full_path, 
+               sr1.run_identifier as run1, sr2.run_identifier as run2
+        FROM file_entries f1
+        JOIN file_entries f2 ON f1.md5_hash = f2.md5_hash
+        JOIN scan_runs sr1 ON f1.run_id = sr1.run_id
+        JOIN scan_runs sr2 ON f2.run_id = sr2.run_id
+        WHERE f1.full_path < f2.full_path
+        ORDER BY f1.md5_hash
+    ''')
+    
+    duplicates = cursor.fetchall()
+    if not duplicates:
+        print("No duplicate files found.")
+        return
+    
+    current_hash = None
+    for md5_hash, path1, path2, run1, run2 in duplicates:
+        if md5_hash != current_hash:
+            print(f"\nFiles with hash {md5_hash}:")
+            current_hash = md5_hash
+        print(f"  Run '{run1}': {path1}")
+        print(f"  Run '{run2}': {path2}")
+
 def main():
     parser = argparse.ArgumentParser(description='Filesystem crawler and indexer')
     parser.add_argument('run_identifier', help='Unique identifier for this scan run')
     parser.add_argument('drive_name', help='Name of the drive being scanned')
     parser.add_argument('path', help='Base path to start scanning from')
+    parser.add_argument('--find-duplicates', action='store_true',
+                      help='Show duplicate files after scanning')
     
     args = parser.parse_args()
     
@@ -90,6 +120,9 @@ def main():
         
         print(f"Scan completed successfully. Run ID: {run_id}")
         
+        if args.find_duplicates:
+            find_duplicates(conn)
+            
     finally:
         conn.close()
 
