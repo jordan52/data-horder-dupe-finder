@@ -169,11 +169,13 @@ def find_duplicates(conn):
             f.filename,
             f.md5_hash,
             f.full_path,
-            sr.run_identifier
+            sr.run_identifier,
+            sr.scan_timestamp
         FROM file_entries f
         JOIN scan_runs sr ON f.run_id = sr.run_id
         JOIN DuplicateGroups d ON f.filename = d.filename 
             AND f.md5_hash = d.md5_hash
+        GROUP BY f.filename, f.md5_hash, f.full_path, sr.run_identifier
         ORDER BY f.filename, f.md5_hash, sr.run_identifier
     ''')
     
@@ -183,10 +185,10 @@ def find_duplicates(conn):
         return
     
     current_key = None
-    for filename, md5_hash, path, run_id in duplicates:
+    for filename, md5_hash, path, run_id, scan_timestamp in duplicates:
         key = (filename, md5_hash)
         if key != current_key:
-            print(f"\nDuplicate file: {filename}")
+            print(f"\nDuplicate file: {filename} at {scan_timestamp}")
             print(f"MD5 Hash: {md5_hash}")
             current_key = key
         print(f"  Run '{run_id}': {path}")
