@@ -64,6 +64,101 @@ def find_duplicates(conn):
     
     cursor.execute('''
         WITH DuplicateGroups AS (
+            SELECT filename, md5_hash, full_path
+            FROM file_entries
+            GROUP BY filename, md5_hash, full_path
+            HAVING COUNT(*) > 1
+        ),
+        UniqueDuplicates AS (
+            SELECT filename, md5_hash
+            FROM file_entries
+            GROUP BY filename, md5_hash
+            HAVING COUNT(DISTINCT full_path) > 1
+        )
+        SELECT 
+            f.filename,
+            f.md5_hash,
+            f.full_path,
+            sr.run_identifier
+        FROM file_entries f
+        JOIN scan_runs sr ON f.run_id = sr.run_id
+        JOIN UniqueDuplicates ud ON f.filename = ud.filename 
+            AND f.md5_hash = ud.md5_hash
+        ORDER BY f.filename, f.md5_hash, sr.run_identifier
+    ''')
+    
+    duplicates = cursor.fetchall()
+    if not duplicates:
+        print("No duplicate files found.")
+        return
+    
+    current_key = None
+    for filename, md5_hash, path, run_id in duplicates:
+        key = (filename, md5_hash)
+        if key != current_key:
+            print(f"\nDuplicate file: {filename}")
+            print(f"MD5 Hash: {md5_hash}")
+            current_key = key
+        print(f"  Run '{run_id}': {path}")
+
+def find_modified_files(conn):
+    """Find files that share the same name but have different MD5 hashes"""
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        WITH FileVersions AS (
+            SELECT 
+                f.filename,
+                f.md5_hash,
+                f.full_path,
+                f.modified_time,
+                sr.run_identifier,
+                ROW_NUMBER() OVER (
+                    PARTITION BY f.filename 
+                    ORDER BY datetime(f.modified_time) DESC
+                ) as version_rank
+            FROM file_entries f
+            JOIN scan_runs sr ON f.run_id = sr.run_id
+            WHERE f.filename IN (
+                SELECT filename
+                FROM file_entries
+                GROUP BY filename
+                HAVING COUNT(DISTINCT md5_hash) > 1
+            )
+        )
+        SELECT 
+            filename,
+            md5_hash,
+            full_path,
+            modified_time,
+            run_identifier,
+            version_rank
+        FROM FileVersions
+        ORDER BY filename, version_rank
+    ''')
+    
+    results = cursor.fetchall()
+    if not results:
+        print("No modified files found.")
+        return
+    
+    current_file = None
+    for filename, md5_hash, path, mod_time, run_id, rank in results:
+        if filename != current_file:
+            print(f"\nFile: {filename}")
+            current_file = filename
+        
+        latest = " (Latest version)" if rank == 1 else ""
+        print(f"  Run '{run_id}': {path}")
+        print(f"    Modified: {mod_time}")
+        print(f"    MD5: {md5_hash}{latest}")
+
+def find_duplicates(conn):
+    """Find files that share the same filename and MD5 hash"""
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        WITH DuplicateGroups AS (
             SELECT filename, md5_hash
             FROM file_entries
             GROUP BY filename, md5_hash
@@ -102,6 +197,8 @@ def main():
     parser.add_argument('path', help='Base path to start scanning from')
     parser.add_argument('--find-duplicates', action='store_true',
                       help='Show duplicate files after scanning')
+    parser.add_argument('--find-modified', action='store_true',
+                      help='Show files with same name but different content')
     
     args = parser.parse_args()
     
@@ -131,6 +228,9 @@ def main():
         
         if args.find_duplicates:
             find_duplicates(conn)
+        
+        if args.find_modified:
+            find_modified_files(conn)
             
     finally:
         conn.close()
