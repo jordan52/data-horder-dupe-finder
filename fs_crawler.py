@@ -59,18 +59,19 @@ def scan_filesystem(conn, run_id, base_path):
     conn.commit()
 
 def find_duplicates(conn):
-    """Find files that share the same MD5 hash but have different paths"""
+    """Find files that share the same filename and MD5 hash but have different paths"""
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT f1.md5_hash, f1.full_path, f2.full_path, 
+        SELECT f1.filename, f1.md5_hash, f1.full_path, f2.full_path, 
                sr1.run_identifier as run1, sr2.run_identifier as run2
         FROM file_entries f1
-        JOIN file_entries f2 ON f1.md5_hash = f2.md5_hash
+        JOIN file_entries f2 ON f1.md5_hash = f2.md5_hash 
+            AND f1.filename = f2.filename
         JOIN scan_runs sr1 ON f1.run_id = sr1.run_id
         JOIN scan_runs sr2 ON f2.run_id = sr2.run_id
         WHERE f1.full_path < f2.full_path
-        ORDER BY f1.md5_hash
+        ORDER BY f1.filename, f1.md5_hash
     ''')
     
     duplicates = cursor.fetchall()
@@ -78,11 +79,11 @@ def find_duplicates(conn):
         print("No duplicate files found.")
         return
     
-    current_hash = None
-    for md5_hash, path1, path2, run1, run2 in duplicates:
-        if md5_hash != current_hash:
-            print(f"\nFiles with hash {md5_hash}:")
-            current_hash = md5_hash
+    current_file = None
+    for filename, md5_hash, path1, path2, run1, run2 in duplicates:
+        if filename != current_file:
+            print(f"\nDuplicate file: {filename} (hash: {md5_hash})")
+            current_file = filename
         print(f"  Run '{run1}': {path1}")
         print(f"  Run '{run2}': {path2}")
 
