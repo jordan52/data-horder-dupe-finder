@@ -134,6 +134,7 @@ def find_modified_files(conn):
             run_identifier,
             version_rank
         FROM FileVersions
+        GROUP BY filename, md5_hash, full_path
         ORDER BY filename, version_rank
     ''')
     
