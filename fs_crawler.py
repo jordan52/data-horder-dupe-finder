@@ -195,46 +195,55 @@ def find_duplicates(conn):
 
 def main():
     parser = argparse.ArgumentParser(description='Filesystem crawler and indexer')
-    parser.add_argument('run_identifier', help='Unique identifier for this scan run')
-    parser.add_argument('drive_name', help='Name of the drive being scanned')
-    parser.add_argument('path', help='Base path to start scanning from')
-    parser.add_argument('--find-duplicates', action='store_true',
-                      help='Show duplicate files after scanning')
-    parser.add_argument('--find-modified', action='store_true',
-                      help='Show files with same name but different content')
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    
+    # Scan command
+    scan_parser = subparsers.add_parser('scan', help='Scan filesystem and store metadata')
+    scan_parser.add_argument('run_identifier', help='Unique identifier for this scan run')
+    scan_parser.add_argument('drive_name', help='Name of the drive being scanned')
+    scan_parser.add_argument('path', help='Base path to start scanning from')
+    
+    # Analyze command
+    analyze_parser = subparsers.add_parser('analyze', help='Analyze existing scans')
+    analyze_parser.add_argument('analysis_type', choices=['find_duplicates', 'find_modified'],
+                              help='Type of analysis to perform')
     
     args = parser.parse_args()
     
-    if not os.path.exists(args.path):
-        print(f"Error: Path '{args.path}' does not exist", file=sys.stderr)
+    if not args.command:
+        parser.print_help()
         sys.exit(1)
     
     init_database()
     conn = sqlite3.connect('filesystem.db')
     
     try:
-        cursor = conn.cursor()
-        
-        # Create scan run entry
-        cursor.execute('''
-            INSERT INTO scan_runs (run_identifier, drive_name, base_path)
-            VALUES (?, ?, ?)
-        ''', (args.run_identifier, args.drive_name, args.path))
-        
-        run_id = cursor.lastrowid
-        conn.commit()
-        
-        # Scan filesystem
-        scan_filesystem(conn, run_id, args.path)
-        
-        print(f"Scan completed successfully. Run ID: {run_id}")
-        
-        if args.find_duplicates:
-            find_duplicates(conn)
-        
-        if args.find_modified:
-            find_modified_files(conn)
+        if args.command == 'scan':
+            if not os.path.exists(args.path):
+                print(f"Error: Path '{args.path}' does not exist", file=sys.stderr)
+                sys.exit(1)
+                
+            cursor = conn.cursor()
             
+            # Create scan run entry
+            cursor.execute('''
+                INSERT INTO scan_runs (run_identifier, drive_name, base_path)
+                VALUES (?, ?, ?)
+            ''', (args.run_identifier, args.drive_name, args.path))
+            
+            run_id = cursor.lastrowid
+            conn.commit()
+            
+            # Scan filesystem
+            scan_filesystem(conn, run_id, args.path)
+            print(f"Scan completed successfully. Run ID: {run_id}")
+            
+        elif args.command == 'analyze':
+            if args.analysis_type == 'find_duplicates':
+                find_duplicates(conn)
+            elif args.analysis_type == 'find_modified':
+                find_modified_files(conn)
+                
     finally:
         conn.close()
 

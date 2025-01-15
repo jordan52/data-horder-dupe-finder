@@ -21,22 +21,30 @@ No additional dependencies required. Just clone the repository and run with Pyth
 
 ## Usage
 
-Basic scan:
+The tool has two main commands: `scan` and `analyze`.
+
+### Scan Command
+Scans a filesystem and stores metadata:
 ```bash
-python fs_crawler.py "scan_id" "drive_name" "/path/to/scan"
+python fs_crawler.py scan "scan_id" "drive_name" "/path/to/scan"
 ```
 
-Scan and find duplicates:
-```bash
-python fs_crawler.py "scan_id" "drive_name" "/path/to/scan" --find-duplicates
-```
-
-### Arguments
-
+Arguments:
 - `run_identifier`: Unique identifier for this scan run
 - `drive_name`: Name of the drive being scanned
 - `path`: Base path to start scanning from
-- `--find-duplicates`: Optional flag to show duplicate files after scanning
+
+### Analyze Command
+Analyzes existing scans:
+```bash
+python fs_crawler.py analyze find_duplicates
+python fs_crawler.py analyze find_modified
+```
+
+Arguments:
+- `analysis_type`: Type of analysis to perform
+  - `find_duplicates`: Find files with same name and MD5 hash
+  - `find_modified`: Find files with same name but different content
 
 ## Database Schema
 
