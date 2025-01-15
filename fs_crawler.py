@@ -69,7 +69,7 @@ def find_duplicates(conn):
             GROUP BY filename, md5_hash
             HAVING COUNT(*) > 1
         )
-        SELECT 
+        SELECT DISTINCT
             f.filename,
             f.md5_hash,
             f.full_path,
