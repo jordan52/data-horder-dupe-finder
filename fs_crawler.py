@@ -59,19 +59,26 @@ def scan_filesystem(conn, run_id, base_path):
     conn.commit()
 
 def find_duplicates(conn):
-    """Find files that share the same filename and MD5 hash but have different paths"""
+    """Find files that share the same filename and MD5 hash"""
     cursor = conn.cursor()
     
     cursor.execute('''
-        SELECT f1.filename, f1.md5_hash, f1.full_path, f2.full_path, 
-               sr1.run_identifier as run1, sr2.run_identifier as run2
-        FROM file_entries f1
-        JOIN file_entries f2 ON f1.md5_hash = f2.md5_hash 
-            AND f1.filename = f2.filename
-        JOIN scan_runs sr1 ON f1.run_id = sr1.run_id
-        JOIN scan_runs sr2 ON f2.run_id = sr2.run_id
-        WHERE f1.full_path < f2.full_path
-        ORDER BY f1.filename, f1.md5_hash
+        WITH DuplicateGroups AS (
+            SELECT filename, md5_hash
+            FROM file_entries
+            GROUP BY filename, md5_hash
+            HAVING COUNT(*) > 1
+        )
+        SELECT 
+            f.filename,
+            f.md5_hash,
+            f.full_path,
+            sr.run_identifier
+        FROM file_entries f
+        JOIN scan_runs sr ON f.run_id = sr.run_id
+        JOIN DuplicateGroups d ON f.filename = d.filename 
+            AND f.md5_hash = d.md5_hash
+        ORDER BY f.filename, f.md5_hash, sr.run_identifier
     ''')
     
     duplicates = cursor.fetchall()
@@ -79,13 +86,14 @@ def find_duplicates(conn):
         print("No duplicate files found.")
         return
     
-    current_file = None
-    for filename, md5_hash, path1, path2, run1, run2 in duplicates:
-        if filename != current_file:
-            print(f"\nDuplicate file: {filename} (hash: {md5_hash})")
-            current_file = filename
-        print(f"  Run '{run1}': {path1}")
-        print(f"  Run '{run2}': {path2}")
+    current_key = None
+    for filename, md5_hash, path, run_id in duplicates:
+        key = (filename, md5_hash)
+        if key != current_key:
+            print(f"\nDuplicate file: {filename}")
+            print(f"MD5 Hash: {md5_hash}")
+            current_key = key
+        print(f"  Run '{run_id}': {path}")
 
 def main():
     parser = argparse.ArgumentParser(description='Filesystem crawler and indexer')
