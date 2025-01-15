@@ -58,6 +58,39 @@ def scan_filesystem(conn, run_id, base_path):
     
     conn.commit()
 
+def clear_path_entries(conn, base_path):
+    """Delete all file entries for a given base path"""
+    cursor = conn.cursor()
+    
+    # Find all run_ids associated with this base path
+    cursor.execute('''
+        SELECT run_id 
+        FROM scan_runs 
+        WHERE base_path = ?
+    ''', (base_path,))
+    
+    run_ids = cursor.fetchall()
+    if not run_ids:
+        print(f"No scans found for path: {base_path}")
+        return
+    
+    # Delete file entries for these runs
+    run_id_list = ','.join(str(rid[0]) for rid in run_ids)
+    cursor.execute(f'''
+        DELETE FROM file_entries 
+        WHERE run_id IN ({run_id_list})
+    ''')
+    
+    # Delete the scan runs
+    cursor.execute('''
+        DELETE FROM scan_runs 
+        WHERE base_path = ?
+    ''', (base_path,))
+    
+    deleted_files = cursor.rowcount
+    conn.commit()
+    print(f"Cleared {deleted_files} entries for path: {base_path}")
+
 def find_duplicates(conn):
     """Find files that share the same filename and MD5 hash"""
     cursor = conn.cursor()
@@ -208,6 +241,10 @@ def main():
     analyze_parser.add_argument('analysis_type', choices=['find_duplicates', 'find_modified'],
                               help='Type of analysis to perform')
     
+    # Clear command
+    clear_parser = subparsers.add_parser('clear', help='Clear entries for a specific path')
+    clear_parser.add_argument('base_path', help='Base path to clear entries for')
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -243,6 +280,9 @@ def main():
                 find_duplicates(conn)
             elif args.analysis_type == 'find_modified':
                 find_modified_files(conn)
+        
+        elif args.command == 'clear':
+            clear_path_entries(conn, args.base_path)
                 
     finally:
         conn.close()

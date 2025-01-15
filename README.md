@@ -46,6 +46,15 @@ Arguments:
   - `find_duplicates`: Find files with same name and MD5 hash
   - `find_modified`: Find files with same name but different content
 
+### Clear Command
+Removes all scan entries for a specific path:
+```bash
+python fs_crawler.py clear "/path/to/clear"
+```
+
+Arguments:
+- `base_path`: Base path to clear entries for
+
 ## Database Schema
 
 The tool creates a SQLite database (`filesystem.db`) with two tables:
